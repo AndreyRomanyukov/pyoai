@@ -3,16 +3,7 @@
 from __future__ import nested_scopes
 from __future__ import absolute_import
 
-try:
-    import urllib.request as urllib2
-    from urllib.parse import urlencode
-    text_type = str
-except ImportError:
-    import urllib2
-    from urllib import urlencode
-    text_type = unicode
-
-import sys
+import requests
 import base64
 from lxml import etree
 import time
@@ -21,11 +12,15 @@ import codecs
 from oaipmh import common, metadata, validation, error
 from oaipmh.datestamp import datestamp_to_datetime, datetime_to_datestamp
 
+
+TEXT_TYPE = unicode
 WAIT_DEFAULT = 120 # two minutes
 WAIT_MAX = 5
 
+
 class Error(Exception):
     pass
+
 
 class BaseClient(common.OAIPMH):
 
@@ -100,7 +95,7 @@ class BaseClient(common.OAIPMH):
         # and we're basically hacking around non-wellformedness anyway,
         # but oh well
         if self._ignore_bad_character_hack:
-            xml = text_type(xml, 'UTF-8', 'replace')
+            xml = TEXT_TYPE(xml, 'UTF-8', 'replace')
             # also get rid of character code 12
             xml = xml.replace(chr(12), '?')
             xml = xml.encode('UTF-8')
@@ -272,8 +267,8 @@ class BaseClient(common.OAIPMH):
                                      namespaces=namespaces).evaluate
             # make sure we get back unicode strings instead
             # of lxml.etree._ElementUnicodeResult objects.
-            setSpec = text_type(e('string(oai:setSpec/text())'))
-            setName = text_type(e('string(oai:setName/text())'))
+            setSpec = TEXT_TYPE(e('string(oai:setSpec/text())'))
+            setName = TEXT_TYPE(e('string(oai:setName/text())'))
             # XXX setDescription nodes
             sets.append((setSpec, setName, None))
         return sets, token
@@ -307,6 +302,7 @@ class BaseClient(common.OAIPMH):
     def makeRequest(self, **kw):
         raise NotImplementedError
 
+
 class Client(BaseClient):
     def __init__(
             self, base_url, metadata_registry=None, credentials=None, local_file=False, force_http_get=False):
@@ -327,19 +323,8 @@ class Client(BaseClient):
                 text = xmlfile.read()
             return text.encode('ascii', 'replace')
         else:
-            # XXX include From header?
-            headers = {'User-Agent': 'pyoai'}
-            if self._credentials is not None:
-                headers['Authorization'] = 'Basic ' + self._credentials.strip()
-            if self._force_http_get:
-                request_url = '%s?%s' % (self._base_url, urlencode(kw))
-                request = urllib2.Request(request_url, headers=headers)
-            else:
-                binary_data = urlencode(kw).encode('utf-8')
-                request = urllib2.Request(
-                    self._base_url, data=binary_data, headers=headers)
+            return retrieveFromUrlWaiting(self._base_url, kw)
 
-            return retrieveFromUrlWaiting(request)
 
 def buildHeader(header_node, namespaces):
     e = etree.XPathEvaluator(header_node,
@@ -351,6 +336,7 @@ def buildHeader(header_node, namespaces):
     deleted = e("@status = 'deleted'")
     return common.Header(header_node, identifier, datestamp, setspec, deleted)
 
+
 def ResumptionListGenerator(firstBatch, nextBatch):
     result, token = firstBatch()
     while 1:
@@ -360,34 +346,35 @@ def ResumptionListGenerator(firstBatch, nextBatch):
             break
         result, token = nextBatch(token)
 
-def retrieveFromUrlWaiting(request,
+
+def retrieveFromUrlWaiting(url, params,
                            wait_max=WAIT_MAX, wait_default=WAIT_DEFAULT):
     """Get text from URL, handling 503 Retry-After.
     """
     for i in list(range(wait_max)):
         try:
-            f = urllib2.urlopen(request)
-            text = f.read()
-            f.close()
-            # we successfully opened without having to wait
-            break
-        except urllib2.HTTPError:
-            e = sys.exc_info()[1]
-            if e.code == 503:
+            f = requests.get(url=url, params=params, timeout=15*60)
+
+            if f.status_code == 503:
                 try:
-                    retryAfter = int(e.hdrs.get('Retry-After'))
+                    wait_time = int(f.headers.get('Retry-After'))
                 except TypeError:
-                    retryAfter = None
-                if retryAfter is None:
-                    time.sleep(wait_default)
-                else:
-                    time.sleep(retryAfter)
-            else:
-                # reraise any other HTTP error
-                raise
+                    wait_time = WAIT_DEFAULT
+                time.sleep(wait_time)
+                continue
+
+            text = f.content
+            f.close()
+            break
+        except requests.exceptions.ChunkedEncodingError as e:
+            time.sleep(wait_default)
+            continue
+        except Exception as e:
+            raise e
     else:
         raise Error("Waited too often (more than %s times)" % wait_max)
     return text
+
 
 class ServerClient(BaseClient):
     def __init__(self, server, metadata_registry=None):
