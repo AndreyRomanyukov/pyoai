@@ -15,7 +15,7 @@ from oaipmh.datestamp import datestamp_to_datetime, datetime_to_datestamp
 
 TEXT_TYPE = unicode
 WAIT_DEFAULT = 120 # two minutes
-WAIT_MAX = 5
+WAIT_MAX = 15
 
 
 class Error(Exception):
