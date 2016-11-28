@@ -27,5 +27,5 @@ http://www.openarchives.org/OAI/openarchivesprotocol.html
     zip_safe=False,
     license='BSD',
     keywords='OAI-PMH xml archive',
-    install_requires=['lxml', 'requests'],
+    install_requires=['lxml', 'requests', 'six'],
 )

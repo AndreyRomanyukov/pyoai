@@ -8,13 +8,14 @@ import base64
 from lxml import etree
 import time
 import codecs
+import six
 
 from oaipmh import common, metadata, validation, error
 from oaipmh.datestamp import datestamp_to_datetime, datetime_to_datestamp
 
 
-TEXT_TYPE = unicode
-WAIT_DEFAULT = 120 # two minutes
+TEXT_TYPE = six.text_type
+WAIT_DEFAULT = 120  # two minutes
 WAIT_MAX = 15
 
 
