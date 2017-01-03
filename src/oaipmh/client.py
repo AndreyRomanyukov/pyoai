@@ -356,7 +356,7 @@ def retrieveFromUrlWaiting(url, params,
         try:
             f = requests.get(url=url, params=params, timeout=15*60)
 
-            if f.status_code == 503:
+            if f.status_code in (502, 503):
                 try:
                     wait_time = int(f.headers.get('Retry-After'))
                 except TypeError:
