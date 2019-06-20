@@ -354,7 +354,8 @@ def retrieveFromUrlWaiting(url, params,
     """
     for i in list(range(wait_max)):
         try:
-            f = requests.get(url=url, params=params, timeout=15*60)
+            f = requests.get(url=url, params=params, timeout=15*60,
+                             headers={'User-Agent': 'oaipmh/2.4.6'})
 
             if f.status_code in (502, 503):
                 try:
